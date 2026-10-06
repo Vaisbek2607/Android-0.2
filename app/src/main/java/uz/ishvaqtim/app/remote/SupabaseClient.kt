@@ -23,7 +23,7 @@ import java.net.URLEncoder
 object SupabaseClient {
 
     private const val PROJECT_URL = "https://hkyyrsgnoonsihbwydrs.supabase.co"
-    private const val ANON_KEY = "sb_publishable_kdlfcT6hiuEXhZCwWPApeg__SFyVNsX"
+    private const val ANON_KEY = "sb_publishable_kdlfcTZhiuEXhZCwWPApeg__SFyVNsX"
 
     private const val TAG = "SupabaseClient"
 
