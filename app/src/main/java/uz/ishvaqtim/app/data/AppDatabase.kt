@@ -4,13 +4,30 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
+private const val DB_VERSION = 3
+
 /** Lokal SQLite bazasi (Android ning o'rnatilgan SQLite si). Jadvallar shu yerda yaratiladi. */
 class AppDatabase private constructor(context: Context) :
-    SQLiteOpenHelper(context, "ish_vaqtim.db", null, 1) {
+    SQLiteOpenHelper(context, "ish_vaqtim.db", null, DB_VERSION) {
 
     override fun onCreate(db: SQLiteDatabase) {
+        createProfileTable(db)
+        createPendingScansTable(db)
+        createPendingAttendanceTable(db)
+    }
+
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            createPendingScansTable(db)
+        }
+        if (oldVersion < 3) {
+            createPendingAttendanceTable(db)
+        }
+    }
+
+    private fun createProfileTable(db: SQLiteDatabase) {
         db.execSQL(
-            "CREATE TABLE profile (" +
+            "CREATE TABLE IF NOT EXISTS profile (" +
                 "id INTEGER PRIMARY KEY, " +
                 "firstName TEXT NOT NULL, " +
                 "lastName TEXT NOT NULL, " +
@@ -24,8 +41,28 @@ class AppDatabase private constructor(context: Context) :
         )
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Hozircha o'zgartirishlar yo'q. Keyingi bosqichlarda jadvallar shu yerda yangilanadi.
+    /** Hali ulanmagan kartaning skani, internet yo'q paytda shu yerda kutadi. */
+    private fun createPendingScansTable(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS pending_scans (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "cardHash TEXT NOT NULL, " +
+                "tappedAt TEXT NOT NULL, " +
+                "createdAt TEXT NOT NULL)"
+        )
+    }
+
+    /** Foydalanuvchi Kirish/Chiqishni TANLAGANDAN keyin, internet yo'qligi sababli yuborilmay qolgan qaror. */
+    private fun createPendingAttendanceTable(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS pending_attendance (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "profileId INTEGER NOT NULL, " +
+                "workDate TEXT NOT NULL, " +
+                "checkIn TEXT, " +
+                "checkOut TEXT, " +
+                "createdAt TEXT NOT NULL)"
+        )
     }
 
     companion object {
