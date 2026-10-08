@@ -9,12 +9,21 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import uz.ishvaqtim.app.data.ProfileDao
 import uz.ishvaqtim.app.data.ProfileEntity
-import uz.ishvaqtim.app.domain.NfcDecision
-import uz.ishvaqtim.app.domain.NfcRules
 import uz.ishvaqtim.app.nfc.CardHasher
 import uz.ishvaqtim.app.remote.SupabaseClient
+import uz.ishvaqtim.app.sync.AttendanceProcessor
+import java.io.IOException
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
+
+/** Karta ro'yxatdan o'tgan bo'lsa, foydalanuvchi Kirish/Chiqishni tanlashi uchun kerakli ma'lumot. */
+data class PendingChoice(
+    val profileId: Long,
+    val workDate: String,
+    val existingCheckIn: String?,
+    val existingCheckOut: String?
+)
 
 /** Ekran holatini saqlaydi: profil, oxirgi skan qilingan karta, NFC holati. */
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -35,6 +44,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Supabase bilan bog'liq oxirgi amal natijasi (foydalanuvchiga ko'rsatiladi). */
     var supabaseStatus by mutableStateOf("")
 
+    /** Karta ro'yxatdan o'tgan bo'lsa, shu to'ldiriladi - ekranda tanlov oynasi chiqishiga sabab bo'ladi. */
+    var pendingChoice by mutableStateOf<PendingChoice?>(null)
+        private set
+
     init {
         viewModelScope.launch {
             profile = dao.get()
@@ -43,10 +56,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Karta tekkizilganda chaqiriladi.
-     * 1) Avval bu karta Supabase'da biror profilga bog'langanmi, tekshiradi.
-     * 2) Bog'langan bo'lsa - NFC vaqt qoidalari bo'yicha Kirish/Chiqish yozadi.
-     * 3) Bog'lanmagan bo'lsa - "nfc_scans" ga yozadi (Mini App'da ro'yxatdan o'tish uchun).
+     * Karta tekkizilganda chaqiriladi. Endi vaqt oynasi tekshirilmaydi - istalgan vaqtda qabul qilinadi.
+     * Karta ro'yxatdan o'tgan bo'lsa, Kirish/Chiqish tanlovi uchun oyna chiqadi ("pendingChoice").
      */
     fun onCardScanned(uid: ByteArray) {
         val hash = CardHasher.hash(uid)
@@ -54,49 +65,63 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         supabaseStatus = "Tekshirilmoqda..."
 
         viewModelScope.launch {
-            val remoteProfile = SupabaseClient.findProfileByCardHash(hash)
+            try {
+                val remoteProfile = SupabaseClient.findProfileByCardHash(hash)
 
-            if (remoteProfile == null) {
-                // Karta hali hech kimga bog'lanmagan - pairing uchun yozamiz
-                val ok = SupabaseClient.insertNfcScan(hash)
-                supabaseStatus = if (ok) {
-                    "✅ Karta topilmadi (ulanmagan). Skan yuborildi, Telegram ilovada ro'yxatdan o'ting."
-                } else {
-                    "⚠️ Yuborilmadi (internet yoki server xatosi)"
-                }
-                return@launch
-            }
-
-            val profileId = remoteProfile.getLong("id")
-            val today = LocalDate.now().toString()
-
-            val todayAttendance = SupabaseClient.findAttendance(profileId, today)
-            val existingCheckIn = todayAttendance
-                ?.optString("check_in", null)
-                ?.let { LocalTime.parse(it) }
-            val existingCheckOut = todayAttendance
-                ?.optString("check_out", null)
-                ?.let { LocalTime.parse(it) }
-
-            val decision = NfcRules.decide(LocalTime.now(), existingCheckIn, existingCheckOut)
-
-            supabaseStatus = when (decision) {
-                is NfcDecision.RecordEntry -> {
-                    val ok = SupabaseClient.upsertAttendance(profileId, today, decision.time.toString(), null)
-                    if (ok) "✅ Kirish qayd etildi: ${decision.time}" else "⚠️ Yozib bo'lmadi (internet xatosi)"
+                if (remoteProfile == null) {
+                    supabaseStatus = AttendanceProcessor.handleUnpairedCard(getApplication(), hash)
+                    return@launch
                 }
 
-                is NfcDecision.RecordExit -> {
-                    val ok = SupabaseClient.upsertAttendance(profileId, today, null, decision.time.toString())
-                    if (ok) "✅ Chiqish qayd etildi: ${decision.time}" else "⚠️ Yozib bo'lmadi (internet xatosi)"
-                }
+                val profileId = remoteProfile.getLong("id")
+                val today = LocalDate.now().toString()
+                val existing = SupabaseClient.findAttendance(profileId, today)
 
-                NfcDecision.AlreadyEntered -> "ℹ️ Kirish allaqachon qayd etilgan"
-                NfcDecision.AlreadyExited -> "ℹ️ Chiqish allaqachon qayd etilgan"
-                NfcDecision.EntryRequired -> "⚠️ Avval Kirish qayd etilishi kerak"
-                NfcDecision.OutsideWindow -> "⚠️ Bu vaqtda NFC qabul qilinmaydi"
+                pendingChoice = PendingChoice(
+                    profileId = profileId,
+                    workDate = today,
+                    existingCheckIn = existing?.optString("check_in", null),
+                    existingCheckOut = existing?.optString("check_out", null)
+                )
+                supabaseStatus = "Kirish yoki Chiqishni tanlang"
+            } catch (e: IOException) {
+                supabaseStatus = "⚠️ Internet yo'q. Internet qaytganda kartani qayta tekkizing."
+            } catch (e: Exception) {
+                supabaseStatus = "❌ Xato: ${e.message}"
             }
         }
+    }
+
+    /** "✅ Kirish" tugmasi bosilganda. */
+    fun confirmEntry() {
+        val choice = pendingChoice ?: return
+        pendingChoice = null
+        val time = LocalTime.now().toString()
+
+        viewModelScope.launch {
+            supabaseStatus = AttendanceProcessor.confirmAttendance(
+                getApplication(), choice.profileId, choice.workDate, time, null
+            )
+        }
+    }
+
+    /** "🚪 Chiqish" tugmasi bosilganda. */
+    fun confirmExit() {
+        val choice = pendingChoice ?: return
+        pendingChoice = null
+        val time = LocalTime.now().toString()
+
+        viewModelScope.launch {
+            supabaseStatus = AttendanceProcessor.confirmAttendance(
+                getApplication(), choice.profileId, choice.workDate, null, time
+            )
+        }
+    }
+
+    /** "Bekor qilish" tugmasi bosilganda - hech narsa yuborilmaydi. */
+    fun cancelChoice() {
+        pendingChoice = null
+        supabaseStatus = "Bekor qilindi"
     }
 
     fun saveProfile(newProfile: ProfileEntity) {

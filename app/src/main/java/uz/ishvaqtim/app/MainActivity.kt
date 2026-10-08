@@ -10,13 +10,21 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import uz.ishvaqtim.app.sync.SyncScheduler
 import uz.ishvaqtim.app.ui.HomeScreen
 import uz.ishvaqtim.app.ui.RegisterScreen
 
@@ -29,6 +37,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
+
+        // Ilova ochilganda, agar oldingi safar navbatga qo'yilgan ma'lumotlar bo'lsa,
+        // ularni yuborishga urinib ko'ramiz (internet bo'lsa, darhol bajariladi).
+        SyncScheduler.scheduleSync(this)
 
         setContent {
             MaterialTheme {
@@ -50,6 +62,39 @@ class MainActivity : ComponentActivity() {
                             RegisterScreen(vm)
                         } else {
                             HomeScreen(profile, vm)
+                        }
+
+                        val choice = vm.pendingChoice
+                        if (choice != null) {
+                            AlertDialog(
+                                onDismissRequest = { vm.cancelChoice() },
+                                title = { Text("Karta tekkizildi") },
+                                text = {
+                                    Column {
+                                        Text("Bugungi holat:")
+                                        Text("Kirish: ${choice.existingCheckIn ?: "—"}")
+                                        Text("Chiqish: ${choice.existingCheckOut ?: "—"}")
+                                    }
+                                },
+                                confirmButton = {
+                                    Button(onClick = { vm.confirmEntry() }) {
+                                        Text("✅ Kirish")
+                                    }
+                                },
+                                dismissButton = {
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        OutlinedButton(onClick = { vm.confirmExit() }) {
+                                            Text("🚪 Chiqish")
+                                        }
+                                        TextButton(
+                                            onClick = { vm.cancelChoice() },
+                                            modifier = Modifier.padding(top = 4.dp)
+                                        ) {
+                                            Text("Bekor qilish")
+                                        }
+                                    }
+                                }
+                            )
                         }
                     }
                 }
