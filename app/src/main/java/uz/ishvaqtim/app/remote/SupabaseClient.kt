@@ -27,7 +27,7 @@ class SupabaseServerException(val code: Int, message: String) : Exception(messag
 object SupabaseClient {
 
     private const val PROJECT_URL = "https://hkyyrsgnoonsihbwydrs.supabase.co"
-    private const val ANON_KEY = "sb_publishable_kdlfcT6hiuEXhZCwWPApeg__SFyVNsX"
+    private const val ANON_KEY = "sb_publishable_kdlfcTZhiuEXhZCwWPApeg__SFyVNsX"
 
     /** Karta skanini "nfc_scans" jadvaliga yozadi (hali hech kimga bog'lanmagan karta uchun). */
     suspend fun insertNfcScan(cardHash: String) {
