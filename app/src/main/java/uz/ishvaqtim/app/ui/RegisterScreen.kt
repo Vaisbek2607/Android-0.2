@@ -123,8 +123,11 @@ fun RegisterScreen(vm: MainViewModel) {
                 Text("NFC karta", style = MaterialTheme.typography.titleMedium)
                 Text(vm.nfcStatus)
                 Text(
-                    if (vm.scannedCardHash != null) "✅ Karta o'qildi"
-                    else "Ish kartangizni telefonning orqa tomoniga tekkizing"
+                    when {
+                        vm.scannedCardHash != null -> "✅ Karta o'qildi"
+                        vm.hasNfc -> "Ish kartangizni telefonning orqa tomoniga tekkizing"
+                        else -> "Bu telefonda NFC yo'q. Pastdagi maydonga tabel raqamingizni kiriting va Tasdiqlang"
+                    }
                 )
                 if (vm.scannedCardHash != null) {
                     Text(vm.supabaseStatus)
