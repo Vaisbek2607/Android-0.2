@@ -12,15 +12,21 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -37,6 +43,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
+        vm.hasNfc = nfcAdapter != null
 
         // Ilova ochilganda, agar oldingi safar navbatga qo'yilgan ma'lumotlar bo'lsa,
         // ularni yuborishga urinib ko'ramiz (internet bo'lsa, darhol bajariladi).
@@ -44,7 +51,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                Scaffold { inner ->
+                Scaffold(
+                    bottomBar = {
+                        if (!vm.hasNfc) {
+                            ManualScanBar(vm)
+                        }
+                    }
+                ) { inner ->
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -107,7 +120,7 @@ class MainActivity : ComponentActivity() {
         val adapter = nfcAdapter
 
         vm.nfcStatus = when {
-            adapter == null -> "Bu telefonda NFC yo'q"
+            adapter == null -> "Bu telefonda NFC yo'q. Pastdagi tugmadan foydalaning."
             !adapter.isEnabled -> "NFC o'chirilgan. Telefon sozlamalarida yoqing"
             else -> "NFC yoqilgan"
         }
@@ -151,4 +164,42 @@ class MainActivity : ComponentActivity() {
         } else {
             intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
         }
+}
+
+/**
+ * NFC yo'q telefonlar uchun pastki panel.
+ * Tabel raqam hali kiritilmagan bo'lsa - kiritish maydoni, aks holda - bitta "Belgilash" tugmasi.
+ */
+@androidx.compose.runtime.Composable
+private fun ManualScanBar(vm: MainViewModel) {
+    val savedId = vm.manualCardId
+
+    if (savedId == null) {
+        var input by remember { mutableStateOf("") }
+
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+            Text("Bu telefonda NFC yo'q. O'zingiz tanlagan tabel raqamingizni kiriting:")
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Button(
+                onClick = { vm.submitManualCardId(input) },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            ) {
+                Text("Tasdiqlash")
+            }
+        }
+    } else {
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+            Button(
+                onClick = { vm.triggerManualScan() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("📌 Kirish/Chiqishni belgilash")
+            }
+        }
+    }
 }
