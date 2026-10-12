@@ -14,6 +14,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +42,11 @@ fun RegisterScreen(vm: MainViewModel) {
     var breakText by rememberSaveable { mutableStateOf("60") }
     var salaryText by rememberSaveable { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // Foydalanuvchi ro'yxatdan o'tish usulini shu yerda tanlaydi: "nfc" yoki "manual".
+    // Hali tanlamagan bo'lsa - null, va tanlov tugmalari ko'rsatiladi.
+    var method by rememberSaveable { mutableStateOf<String?>(null) }
+    var manualInput by rememberSaveable { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -119,18 +125,69 @@ fun RegisterScreen(vm: MainViewModel) {
         )
 
         Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("NFC karta", style = MaterialTheme.typography.titleMedium)
-                Text(vm.nfcStatus)
-                Text(
-                    when {
-                        vm.scannedCardHash != null -> "✅ Karta o'qildi"
-                        vm.hasNfc -> "Ish kartangizni telefonning orqa tomoniga tekkizing"
-                        else -> "Bu telefonda NFC yo'q. Pastdagi maydonga tabel raqamingizni kiriting va Tasdiqlang"
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Qaydnoma usuli", style = MaterialTheme.typography.titleMedium)
+
+                when (method) {
+                    null -> {
+                        // Usul hali tanlanmagan - tanlov tugmalari
+                        if (vm.hasNfc) {
+                            Button(
+                                onClick = { method = "nfc" },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("📡 NFC orqali")
+                            }
+                        } else {
+                            Text("Bu telefonda NFC yo'q, shuning uchun faqat tabel raqam orqali ro'yxatdan o'tish mumkin.")
+                        }
+                        OutlinedButton(
+                            onClick = { method = "manual" },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("🔢 Tabel raqam orqali")
+                        }
                     }
-                )
-                if (vm.scannedCardHash != null) {
-                    Text(vm.supabaseStatus)
+
+                    "nfc" -> {
+                        // NFC tanlandi - haqiqiy karta tekkizish MAJBURIY
+                        Text(vm.nfcStatus)
+                        Text(
+                            if (vm.scannedCardHash != null) "✅ Karta o'qildi"
+                            else "Ish kartangizni telefonning orqa tomoniga tekkizing"
+                        )
+                        if (vm.scannedCardHash != null) {
+                            Text(vm.supabaseStatus)
+                        }
+                        OutlinedButton(onClick = { method = null }) {
+                            Text("‹ Usulni o'zgartirish")
+                        }
+                    }
+
+                    "manual" -> {
+                        // Tabel raqam tanlandi
+                        if (vm.manualCardId == null) {
+                            Text("O'zingiz tanlagan tabel raqamingizni kiriting:")
+                            OutlinedTextField(
+                                value = manualInput,
+                                onValueChange = { manualInput = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            Button(
+                                onClick = { vm.submitManualCardId(manualInput) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Tasdiqlash")
+                            }
+                        } else {
+                            Text("✅ Tabel raqam: ${vm.manualCardId}")
+                            Text(vm.supabaseStatus)
+                        }
+                        OutlinedButton(onClick = { method = null }) {
+                            Text("‹ Usulni o'zgartirish")
+                        }
+                    }
                 }
             }
         }
@@ -155,7 +212,7 @@ fun RegisterScreen(vm: MainViewModel) {
                     start == null || end == null -> "Vaqt noto'g'ri. Format: 08:00"
                     breakMin == null || breakMin < 0 -> "Tanaffus daqiqada bo'lsin (masalan 60)"
                     salary == null || salary <= 0.0 -> "Oylik maoshni kiriting"
-                    cardHash == null -> "Avval kartani telefonga tekkizing"
+                    cardHash == null -> "Avval yuqorida qaydnoma usulini tanlang va tasdiqlang"
                     else -> null
                 }
 

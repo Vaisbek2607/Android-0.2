@@ -53,7 +53,10 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 Scaffold(
                     bottomBar = {
-                        if (!vm.hasNfc) {
+                        // Pastki tugma QURILMAGA emas, balki ro'yxatdan o'tishda TANLANGAN
+                        // usulga qarab chiqadi: tabel raqam saqlangan bo'lsa - tugma bor,
+                        // NFC orqali ro'yxatdan o'tilgan bo'lsa - tugma yo'q (faqat haqiqiy tekkizish).
+                        if (vm.manualCardId != null) {
                             ManualScanBar(vm)
                         }
                     }
@@ -167,39 +170,19 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * NFC yo'q telefonlar uchun pastki panel.
- * Tabel raqam hali kiritilmagan bo'lsa - kiritish maydoni, aks holda - bitta "Belgilash" tugmasi.
+ * Tabel raqam orqali ro'yxatdan o'tgan foydalanuvchilar uchun pastki tugma.
+ * Bosilganda, xuddi haqiqiy NFC karta tekkizilgandek ishlov beriladi -
+ * shu bilan Kirish/Chiqish tanlov oynasi chiqadi (real tekkizishdagi bilan bir xil).
+ * Bu tugma faqat vm.manualCardId mavjud bo'lsa ko'rinadi (MainActivity shartida tekshiriladi).
  */
 @androidx.compose.runtime.Composable
 private fun ManualScanBar(vm: MainViewModel) {
-    val savedId = vm.manualCardId
-
-    if (savedId == null) {
-        var input by remember { mutableStateOf("") }
-
-        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-            Text("Bu telefonda NFC yo'q. O'zingiz tanlagan tabel raqamingizni kiriting:")
-            OutlinedTextField(
-                value = input,
-                onValueChange = { input = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            Button(
-                onClick = { vm.submitManualCardId(input) },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-            ) {
-                Text("Tasdiqlash")
-            }
-        }
-    } else {
-        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-            Button(
-                onClick = { vm.triggerManualScan() },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("📌 Kirish/Chiqishni belgilash")
-            }
+    Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+        Button(
+            onClick = { vm.triggerManualScan() },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("📡 NFC tekkizish")
         }
     }
 }
