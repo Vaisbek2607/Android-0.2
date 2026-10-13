@@ -31,8 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import uz.ishvaqtim.app.sync.SyncScheduler
-import uz.ishvaqtim.app.ui.HomeScreen
 import uz.ishvaqtim.app.ui.RegisterScreen
+import uz.ishvaqtim.app.ui.WebViewScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -77,7 +77,23 @@ class MainActivity : ComponentActivity() {
                         } else if (profile == null) {
                             RegisterScreen(vm)
                         } else {
-                            HomeScreen(profile, vm)
+                            val remoteId = vm.remoteProfileId
+                            if (remoteId != null) {
+                                // Profil Supabase'da bor - tayyor kalendar/statistika sahifasini ko'rsatamiz
+                                WebViewScreen(remoteId)
+                            } else {
+                                // Hali Supabase'ga yozilmagan (masalan ro'yxatdan o'tgan payt internet yo'q edi)
+                                Column(modifier = Modifier.padding(20.dp)) {
+                                    Text("Ma'lumotlar serverga yozilmoqda...")
+                                    val err = vm.remoteProfileError
+                                    if (err != null) {
+                                        Text(err)
+                                        Button(onClick = { vm.retryPushProfile() }) {
+                                            Text("Qayta urinish")
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         val choice = vm.pendingChoice

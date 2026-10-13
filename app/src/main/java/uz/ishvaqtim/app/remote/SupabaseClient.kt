@@ -35,6 +35,36 @@ object SupabaseClient {
         postJson("/rest/v1/nfc_scans", body)
     }
 
+    /**
+     * Yangi profilni to'g'ridan-to'g'ri Supabase'ga yozadi (native ro'yxatdan o'tish).
+     * Supabase yaratgan ID'ni qaytaradi - buni lokal saqlab, keyin WebView shu orqali profilni topadi.
+     */
+    suspend fun insertProfile(
+        firstName: String,
+        lastName: String,
+        scheduleType: String,
+        scheduleStart: String,
+        workStart: String,
+        workEnd: String,
+        breakMinutes: Int,
+        monthlySalary: Double,
+        cardHash: String
+    ): Long {
+        val body = JSONObject().apply {
+            put("first_name", firstName)
+            put("last_name", lastName)
+            put("schedule_type", scheduleType)
+            put("schedule_start", scheduleStart)
+            put("work_start", workStart)
+            put("work_end", workEnd)
+            put("break_minutes", breakMinutes)
+            put("monthly_salary", monthlySalary)
+            put("card_hash", cardHash)
+        }
+        val rows = postJsonReturning("/rest/v1/profiles", body)
+        return rows.getJSONObject(0).getLong("id")
+    }
+
     /** Karta kodi bo'yicha profilni qidiradi. Topilmasa null. */
     suspend fun findProfileByCardHash(cardHash: String): JSONObject? {
         val path = "/rest/v1/profiles?card_hash=eq.${encode(cardHash)}&limit=1"
@@ -90,6 +120,32 @@ object SupabaseClient {
         if (code !in 200..299) {
             connection.disconnect()
             throw SupabaseServerException(code, "GET $path -> $code")
+        }
+
+        val text = BufferedReader(InputStreamReader(connection.inputStream)).use { it.readText() }
+        connection.disconnect()
+        JSONArray(text)
+    }
+
+    /** postJson bilan bir xil, lekin Supabase yaratgan qatorni qaytarib beradi (masalan, yangi ID uchun). */
+    private suspend fun postJsonReturning(path: String, body: JSONObject): JSONArray = withContext(Dispatchers.IO) {
+        val connection = (URL(PROJECT_URL + path).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = 8000
+            readTimeout = 8000
+            setRequestProperty("apikey", ANON_KEY)
+            setRequestProperty("Authorization", "Bearer $ANON_KEY")
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Prefer", "return=representation")
+        }
+
+        OutputStreamWriter(connection.outputStream).use { it.write(body.toString()) }
+
+        val code = connection.responseCode
+        if (code !in 200..299) {
+            connection.disconnect()
+            throw SupabaseServerException(code, "POST $path -> $code")
         }
 
         val text = BufferedReader(InputStreamReader(connection.inputStream)).use { it.readText() }

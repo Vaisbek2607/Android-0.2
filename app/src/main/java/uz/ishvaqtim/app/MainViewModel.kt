@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import uz.ishvaqtim.app.data.ManualCardStore
 import uz.ishvaqtim.app.data.ProfileDao
 import uz.ishvaqtim.app.data.ProfileEntity
+import uz.ishvaqtim.app.data.RemoteProfileStore
 import uz.ishvaqtim.app.nfc.CardHasher
 import uz.ishvaqtim.app.remote.SupabaseClient
 import uz.ishvaqtim.app.sync.AttendanceProcessor
@@ -55,12 +56,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var pendingChoice by mutableStateOf<PendingChoice?>(null)
         private set
 
+    /** Profil Supabase'ga muvaffaqiyatli yozilgandan keyin olingan ID. Buni WebView ekrani ishlatadi. */
+    var remoteProfileId by mutableStateOf<Long?>(null)
+        private set
+
+    /** Profilni Supabase'ga yozishda xato bo'lsa, shu yerga matn yoziladi (qayta urinish uchun). */
+    var remoteProfileError by mutableStateOf<String?>(null)
+        private set
+
     init {
         viewModelScope.launch {
             profile = dao.get()
             loading = false
         }
         manualCardId = ManualCardStore.get(app)
+        remoteProfileId = RemoteProfileStore.get(app)
     }
 
     /** Haqiqiy NFC karta tekkizilganda chaqiriladi. */
@@ -167,6 +177,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             dao.save(newProfile)
             profile = newProfile
         }
+        pushProfileToSupabase(newProfile)
+    }
+
+    /** Profilni Supabase'ga yozadi (WebView shu orqali kalendar/statistikani ko'rsatadi). */
+    fun pushProfileToSupabase(p: ProfileEntity) {
+        remoteProfileError = null
+        viewModelScope.launch {
+            try {
+                val id = SupabaseClient.insertProfile(
+                    firstName = p.firstName,
+                    lastName = p.lastName,
+                    scheduleType = p.scheduleType,
+                    scheduleStart = p.scheduleStart,
+                    workStart = p.workStart,
+                    workEnd = p.workEnd,
+                    breakMinutes = p.breakMinutes,
+                    monthlySalary = p.monthlySalary,
+                    cardHash = p.cardHash
+                )
+                RemoteProfileStore.set(getApplication(), id)
+                remoteProfileId = id
+            } catch (e: IOException) {
+                remoteProfileError = "⚠️ Internet yo'q. Internet qaytganda qayta urining."
+            } catch (e: Exception) {
+                remoteProfileError = "❌ Xato: ${e.message}"
+            }
+        }
+    }
+
+    /** "Qayta urinish" tugmasi bosilganda. */
+    fun retryPushProfile() {
+        val p = profile ?: return
+        pushProfileToSupabase(p)
     }
 
     fun deleteProfile() {
